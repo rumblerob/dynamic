@@ -1,0 +1,19 @@
+@import 'dynamic';
+
+html, body {
+  width: 100%;
+  height: 100%;
+}
+
+body {
+  background: rgba(black,.85);
+  margin: 0;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(white,.85);
+  font-family: Courier;
+  @include dynamic(font-size, 48px before 768px, 200px after 1440px);
+  line-height: 0.8em;
+}

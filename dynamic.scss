@@ -1,0 +1,124 @@
+@function size-of($position) { @return nth($position, 1); }
+@function locator-of($position) { @return nth($position, 2); }
+@function resolution-of($position) { @return nth($position, 3); }
+
+@function px-resolution-of($position) {
+  $resolution: resolution-of($position);
+
+  @if unit($resolution) == "em" {
+    @return $resolution / 1em * 16px;
+  }
+  @else if unit($resolution) == "rem" {
+    @return $resolution / 1rem * 16px;
+  }
+  @else if unit($resolution) == "px" {
+    @return $resolution;
+  }
+  @else {
+    @error "'#{unit($resolution)}' is an unsupported unit for resolutions.";
+  }
+}
+
+// massages data for dynamic-core
+@mixin dynamic($property, $positions...) {
+  // adds sizes and locators to resolution-only positions
+  @for $i from 1 through length($positions) {
+    $position: nth($positions, $i);
+
+    @if length($position) == 1 {
+      $position: null at nth($position, 1);
+      $positions: set-nth($positions, $i, $position);
+    }
+  }
+
+  // if only has one element, massages accordingly
+  @if length($positions) == 1 {
+    $p: nth($positions, 1);
+
+    @if locator-of($p) == "at" {
+      $positions: null at 0, $p, null at infinity;
+    }
+    @else if locator-of($p) == "before" {
+      $positions: size-of($p) at 0, size-of($p) at resolution-of($p);
+    }
+    @else if locator-of($p) == "after" {
+      $positions: size-of($p) at resolution-of($p), size-of($p) at infinity;
+    }
+  }
+
+  @include dynamic-core($property, $positions...);
+}
+
+// where the magic happens
+@mixin dynamic-core($property, $positions...) {
+  $vw: 100vw;
+
+  // handling before-locator positions
+  $p: nth($positions, 1);
+
+  @if locator-of($p) == "before" {
+    @if not size-of($p) {
+      @error "before-locator positions must have defined sizes.";
+    }
+
+    @media (max-width: #{resolution-of($p)}) {
+      #{$property}: size-of($p);
+    }
+  }
+
+  // looping through all consecutive pairs of positions
+  @for $i from 1 to length($positions) {
+    $p1: nth($positions, $i);
+    $p2: nth($positions, $i + 1);
+
+    $resolution-dimensions: "(min-width: #{resolution-of($p1)}) and (max-width: #{resolution-of($p2)})";
+
+    @if resolution-of($p1) == 0 {
+      $resolution-dimensions: "(max-width: #{resolution-of($p2)})";
+    }
+
+    @if resolution-of($p2) == infinity {
+      $resolution-dimensions: "(min-width: #{resolution-of($p1)})";
+    }
+
+    @if not size-of($p1) and not size-of($p2) {
+      @error "Consecutive positions must have at least one size defined between them.";
+    }
+    @else if size-of($p1) and size-of($p2) {
+      @if size-of($p1) == size-of($p2) {
+        @media #{$resolution-dimensions} {
+          #{$property}: size-of($p1);
+        }
+      }
+      @else {
+        $slope: (size-of($p2) - size-of($p1)) / (px-resolution-of($p2) - px-resolution-of($p1)) * $vw;
+        $intercept: size-of($p1) - $slope / $vw * px-resolution-of($p1);
+
+         @media #{$resolution-dimensions} {
+          #{$property}: calc(#{$slope} + #{$intercept});
+        }
+      }
+    }
+    @else {
+      $resolution: if(size-of($p1), px-resolution-of($p1), px-resolution-of($p2));
+      $size: if(size-of($p1), size-of($p1), size-of($p2));
+
+       @media #{$resolution-dimensions} {
+        #{$property}: $size / $resolution * $vw;
+      }
+    }
+  }
+
+  // handling after-locator positions
+  $p: nth($positions, length($positions));
+
+  @if locator-of($p) == "after" {
+    @if not size-of($p) {
+      @error "after-locator positions must have defined sizes.";
+    }
+
+    @media (min-width: #{resolution-of($p)}) {
+      #{$property}: size-of($p);
+    }
+  }
+}
